@@ -13,18 +13,13 @@ class SmallBlock(nn.Module):
 
     def __init__(self, in_channels, out_channels) -> None:
         super(SmallBlock, self).__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        stride = 1
+        self.stride = 1
         # implement a block with two layers and a residual connection
         if in_channels != out_channels:
-            stride = 2
-            self.conv1x1 = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride)
-        # First channel
-        if in_channels == 3:
-            stride = 1
+            self.stride = 2
+            self.conv1x1 = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=self.stride)
         self.block = nn.Sequential(
-            nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=stride, padding=1),
+            nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=self.stride, padding=1),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(),
             nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=3, stride=1, padding=1),
@@ -33,177 +28,93 @@ class SmallBlock(nn.Module):
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
-
         residual = x
-        if self.in_channels == 3:
-            output = self.block(x)
-            return self.relu(output)
-
-        elif (self.in_channels == self.out_channels):
-            output = self.block(x)
-            return self.relu(output + x)
-            
-        else:
-            output = self.block(x)
+        if (self.stride == 2):
             x = self.conv1x1(x)
-            return self.relu(output + x)
+        output = self.block(x)
+        return self.relu(output + x)
+
+class BottleneckBlock(nn.Module):
+
+    def __init__(self, first_channel, in_channels, out_channels, reduce=False) -> None:
+        super(BottleneckBlock, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        stride = 2 if reduce else 1
+        
+        # implement a block with three layers and a residual connection
+        self.block = nn.Sequential(
+            nn.Conv2d(in_channels=first_channel, out_channels=in_channels, kernel_size=1, stride=stride),
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, stride=1),
+            nn.BatchNorm2d(out_channels)
+        )   
+        self.conv1x1 = nn.Conv2d(first_channel, out_channels, kernel_size=1, stride=stride)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        residual = x
+        output = self.block(x)
+        x = self.conv1x1(x)
+        return self.relu(output + x)
 
 
 class ResNet(nn.Module):
     
-    def __init__(self, in_channel = 3, out_channel = 64, bottleneck = True ,layers = [4, 4, 4, 4]):
+    def __init__(self, bottleneck = True ,layers = [4, 4, 4, 4]):
         
         super(ResNet, self).__init__()
 
-        # if not bottleneck:
-        #     resnet = []
-        #     for layer in layers:
-        #         for n in range(layer):
-        #             resnet.append(SmallBlock(in_channel, out_channel))
-        #             in_channel = out_channel
-        #         out_channel = in_channel * 2
+        if not bottleneck:
+            resnet = [nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1)]
+            in_channel = 64
+            out_channel = 64
+            for layer in layers:
+                for n in range(layer):
+                    resnet.append(SmallBlock(in_channel, out_channel))
+                out_channel = in_channel * 2
             
-        #     resnet.append(nn.AvgPool2d(kernel_size=3, stride=1))
-        #     self.resnet = nn.Sequential(*resnet)
+            resnet.append(nn.AvgPool2d(kernel_size=3, stride=1))
+            self.resnet = nn.Sequential(*resnet)
 
-        #     self.classifier = nn.Sequential(
-        #         nn.Linear(in_features=2048, out_features=2048),
-        #         nn.ReLU(),
-        #         nn.Linear(in_features=2048, out_features=1024),
-        #         nn.ReLU(),
-        #         nn.Linear(in_features=1024, out_features=10)
-        #     )   
-
-        
-        self.resnet = nn.Sequential(
-            # Input Dimension 32x32x3
-            nn.Conv2d(in_channels=3, out_channels=64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            # Output Dimension 32x32x64
-
-            # Input Dimension 32x32x64
-            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-
-            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-
-            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
+            self.classifier = nn.Sequential(
+                nn.Linear(in_features=2048, out_features=2048),
+                nn.ReLU(),
+                nn.Linear(in_features=2048, out_features=1024),
+                nn.ReLU(),
+                nn.Linear(in_features=1024, out_features=10)
+            )
+        else:
+            # layers greater than 34
+            resnet = [nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1)]
+            reduce=False
+            in_channel = 64
+            first_channel = 64
+            out_channel = 256
+            for layer in layers:
+                for n in range(layer):
+                    resnet.append(BottleneckBlock(first_channel ,in_channel, out_channel, reduce=reduce))
+                    first_channel = out_channel
+                    reduce=False
+                reduce=True
+                in_channel = in_channel * 2
+                out_channel = out_channel * 2
             
-            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            # Output Dimension 16x16x128
+            resnet.append(nn.AvgPool2d(kernel_size=3, stride=1))
+            self.resnet = nn.Sequential(*resnet)
 
-            # Input Dimension 16x16x128
-            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
+            self.classifier = nn.Sequential(
+                nn.Linear(in_features=8192, out_features=4096),
+                nn.ReLU(),
+                nn.Linear(in_features=4096, out_features=2048),
+                nn.ReLU(),
+                nn.Linear(in_features=2048, out_features=10)
+            )
 
-            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-
-            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            
-            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            # Output Dimension 8x8x256
-
-            # Input Dimension 8x8x256
-            nn.Conv2d(in_channels=256, out_channels=512, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-
-            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-            # Output Dimension 4x4x512
-
-            nn.AvgPool2d(kernel_size=3, stride=1)
-        )
-
-        self.classifier = nn.Sequential(
-            nn.Linear(in_features=2048, out_features=2048),
-            nn.ReLU(),
-            nn.Linear(in_features=2048, out_features=1024),
-            nn.ReLU(),
-            nn.Linear(in_features=1024, out_features=10)
-        ) 
 
     def forward(self, x):
         
@@ -213,15 +124,16 @@ class ResNet(nn.Module):
         return logits
         
 
+        
+
 
 # get the data
 train_dl, test_dl = get_dataloader("cifar", batch_size=128)
 # Training the model
-model = ResNet(3, 64,bottleneck=False ,layers=[4,4,4,4]).to(device)
-print(model)
+model = ResNet(bottleneck=True ,layers=[2,2,2,2]).to(device)
 loss_fn = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
-
+ 
 epochs = 10
 
 for t in range(epochs):
