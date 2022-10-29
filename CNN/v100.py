@@ -124,13 +124,10 @@ class ResNet(nn.Module):
         return logits
         
 
-        
-
-
 # get the data
 train_dl, test_dl = get_dataloader("cifar", batch_size=128)
 # Training the model
-model = ResNet(bottleneck=True ,layers=[2,2,2,2]).to(device)
+model = ResNet(bottleneck=True ,layers=[3,4,6,3]).to(device)
 loss_fn = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
  
