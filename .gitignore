@@ -3,3 +3,8 @@
 data/
 .ipynb_checkpoints/
 __pycache__/
+tweets.api
+xml2yolo
+.vector_cache
+.data
+train
